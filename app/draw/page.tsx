@@ -28,6 +28,12 @@ const modeLabels: Record<DrawingMode, string> = {
   signal: "Signal",
 };
 
+const mobileKeyRows = [
+  ["Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"],
+  ["A", "S", "D", "F", "G", "H", "J", "K", "L"],
+  ["Z", "X", "C", "V", "B", "N", "M"],
+];
+
 const randomBetween = (min: number, max: number) =>
   min + Math.random() * (max - min);
 
@@ -240,6 +246,56 @@ function addStarField(scene: THREE.Scene) {
   scene.add(new THREE.Points(geometry, material));
 }
 
+function MobileKeyboard({
+  onClear,
+  onKey,
+  onUndo,
+}: {
+  onClear: () => void;
+  onKey: (key: string) => void;
+  onUndo: () => void;
+}) {
+  return (
+    <section className="mobile-keyboard" aria-label="모바일 전용 고정 자판">
+      <div className="mobile-keyboard-handle" aria-hidden="true" />
+      {mobileKeyRows.map((row, rowIndex) => (
+        <div
+          className={`mobile-key-row mobile-key-row-${rowIndex + 1}`}
+          key={row.join("")}
+        >
+          {row.map((key) => (
+            <button
+              aria-label={`${key} 키로 입체 오브젝트 만들기`}
+              className="mobile-key"
+              key={key}
+              onClick={() => onKey(key)}
+              type="button"
+            >
+              {key}
+            </button>
+          ))}
+        </div>
+      ))}
+      <div className="mobile-key-row mobile-key-actions">
+        <button className="mobile-key mobile-action-key" onClick={onUndo} type="button">
+          Undo
+        </button>
+        <button
+          aria-label="스페이스 키로 입체 오브젝트 만들기"
+          className="mobile-key mobile-space-key"
+          onClick={() => onKey(" ")}
+          type="button"
+        >
+          Space
+        </button>
+        <button className="mobile-key mobile-action-key" onClick={onClear} type="button">
+          Clear
+        </button>
+      </div>
+    </section>
+  );
+}
+
 export default function DrawingPage() {
   const [mode, setMode] = useState<DrawingMode>("orbit");
   const [markCount, setMarkCount] = useState(0);
@@ -248,8 +304,13 @@ export default function DrawingPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const captureRef = useRef<HTMLTextAreaElement>(null);
   const modeRef = useRef<DrawingMode>("orbit");
+  const isMobileRef = useRef(false);
   const pulseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const runtimeRef = useRef<SceneRuntime | null>(null);
+
+  const focusDesktopCapture = useCallback(() => {
+    if (!isMobileRef.current) captureRef.current?.focus();
+  }, []);
 
   const addMark = useCallback((key: string) => {
     const runtime = runtimeRef.current;
@@ -259,7 +320,8 @@ export default function DrawingPage() {
     runtime.world.add(group);
     runtime.marks.push(group);
 
-    if (runtime.marks.length > 84) {
+    const objectLimit = isMobileRef.current ? 54 : 84;
+    if (runtime.marks.length > objectLimit) {
       const oldest = runtime.marks.shift();
       if (oldest) {
         runtime.world.remove(oldest);
@@ -282,8 +344,8 @@ export default function DrawingPage() {
       disposeObject(last);
     }
     setMarkCount(runtime.marks.length);
-    captureRef.current?.focus();
-  }, []);
+    focusDesktopCapture();
+  }, [focusDesktopCapture]);
 
   const clearScene = useCallback(() => {
     const runtime = runtimeRef.current;
@@ -294,13 +356,13 @@ export default function DrawingPage() {
     });
     runtime.marks = [];
     setMarkCount(0);
-    captureRef.current?.focus();
-  }, []);
+    focusDesktopCapture();
+  }, [focusDesktopCapture]);
 
   const changeMode = (nextMode: DrawingMode) => {
     modeRef.current = nextMode;
     setMode(nextMode);
-    captureRef.current?.focus();
+    focusDesktopCapture();
   };
 
   const downloadArtwork = () => {
@@ -322,12 +384,15 @@ export default function DrawingPage() {
     anchor.href = exportCanvas.toDataURL("image/png");
     anchor.download = `deep-work-three-${Date.now()}.png`;
     anchor.click();
-    captureRef.current?.focus();
+    focusDesktopCapture();
   };
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+    isMobileRef.current = window.matchMedia(
+      "(max-width: 820px) and (pointer: coarse)",
+    ).matches;
 
     let renderer: THREE.WebGLRenderer;
     try {
@@ -344,7 +409,9 @@ export default function DrawingPage() {
     }
 
     renderer.setClearColor(0x0b0c0f, 0);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setPixelRatio(
+      Math.min(window.devicePixelRatio || 1, isMobileRef.current ? 1.5 : 2),
+    );
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.1;
@@ -419,7 +486,7 @@ export default function DrawingPage() {
       renderer.render(scene, camera);
     };
     runtime.frame = window.requestAnimationFrame(animate);
-    captureRef.current?.focus();
+    focusDesktopCapture();
 
     return () => {
       observer.disconnect();
@@ -429,7 +496,7 @@ export default function DrawingPage() {
       runtimeRef.current = null;
       if (pulseTimerRef.current) clearTimeout(pulseTimerRef.current);
     };
-  }, []);
+  }, [focusDesktopCapture]);
 
   useEffect(() => {
     const handlePointer = (event: PointerEvent) => {
@@ -529,7 +596,7 @@ export default function DrawingPage() {
         <main
           className="canvas-surface"
           onClick={() => {
-            captureRef.current?.focus();
+            focusDesktopCapture();
             if (!runtimeRef.current?.marks.length) addMark("start");
           }}
           tabIndex={-1}
@@ -593,6 +660,7 @@ export default function DrawingPage() {
           </span>
         </footer>
       </div>
+      <MobileKeyboard onClear={clearScene} onKey={addMark} onUndo={undo} />
     </div>
   );
 }
