@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { defineConfig } from "vite";
 
 export default defineConfig({
-  base: "/deep-work-typing/",
+  base: "/typeanything/",
   build: {
     emptyOutDir: true,
     outDir: "../dist-pages",
