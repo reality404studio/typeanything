@@ -387,9 +387,9 @@ export default function DrawingPage() {
     observer.observe(canvas);
 
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const clock = new THREE.Clock();
-    const animate = () => {
-      const elapsed = clock.getElapsedTime();
+    const startedAt = performance.now();
+    const animate = (timestamp: number) => {
+      const elapsed = (timestamp - startedAt) / 1000;
       const motion = reducedMotion ? 0 : 1;
       runtime.frame = window.requestAnimationFrame(animate);
       world.rotation.y +=
@@ -418,7 +418,7 @@ export default function DrawingPage() {
       camera.lookAt(0, 0, 0);
       renderer.render(scene, camera);
     };
-    animate();
+    runtime.frame = window.requestAnimationFrame(animate);
     captureRef.current?.focus();
 
     return () => {
