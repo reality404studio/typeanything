@@ -65,6 +65,80 @@ const escapeHtml = (value: string) =>
       ]!,
   );
 
+const mobileKeyRows = [
+  ["Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"],
+  ["A", "S", "D", "F", "G", "H", "J", "K", "L"],
+  ["Z", "X", "C", "V", "B", "N", "M"],
+];
+
+function TypeMobileKeyboard({
+  disabled,
+  onDelete,
+  onKey,
+  onNext,
+}: {
+  disabled: boolean;
+  onDelete: () => void;
+  onKey: () => void;
+  onNext: () => void;
+}) {
+  return (
+    <section
+      aria-label="모바일 문장 타이핑 고정 자판"
+      className="type-mobile-keyboard"
+    >
+      <div aria-hidden="true" className="type-mobile-keyboard-handle" />
+      {mobileKeyRows.map((row, rowIndex) => (
+        <div
+          className={`type-mobile-key-row type-mobile-key-row-${rowIndex + 1}`}
+          key={row.join("")}
+        >
+          {row.map((key) => (
+            <button
+              aria-label={`${key} 키로 문장 타이핑`}
+              className="type-mobile-key"
+              disabled={disabled}
+              key={key}
+              onClick={onKey}
+              type="button"
+            >
+              {key}
+            </button>
+          ))}
+        </div>
+      ))}
+      <div className="type-mobile-key-row type-mobile-key-actions">
+        <button
+          className="type-mobile-key type-mobile-action-key"
+          disabled={disabled}
+          onClick={onNext}
+          type="button"
+        >
+          Next
+        </button>
+        <button
+          aria-label="스페이스 키로 문장 타이핑"
+          className="type-mobile-key type-mobile-space-key"
+          disabled={disabled}
+          onClick={onKey}
+          type="button"
+        >
+          Space
+        </button>
+        <button
+          aria-label="마지막 글자 지우기"
+          className="type-mobile-key type-mobile-action-key"
+          disabled={disabled}
+          onClick={onDelete}
+          type="button"
+        >
+          Delete
+        </button>
+      </div>
+    </section>
+  );
+}
+
 export default function Home() {
   const [lang, setLang] = useState<Language>("ko");
   const [size, setSize] = useState<FontSize>("medium");
@@ -209,7 +283,7 @@ export default function Home() {
   const config = content[lang];
 
   return (
-    <>
+    <div className="type-page">
       <div className={`flash${flash ? " on" : ""}`} />
       <div className="shell">
         <header>
@@ -302,6 +376,12 @@ export default function Home() {
           </span>
         </footer>
       </div>
-    </>
+      <TypeMobileKeyboard
+        disabled={!ready}
+        onDelete={deleteBit}
+        onKey={typeBurst}
+        onNext={() => choosePassage(languageRef.current, true)}
+      />
+    </div>
   );
 }
