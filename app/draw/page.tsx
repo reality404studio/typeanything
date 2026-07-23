@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import "./draw.css";
 
-type DrawingMode = "orbit" | "bloom" | "signal";
+type DrawingMode = "particle" | "line" | "signal";
 
 type SceneRuntime = {
   camera: THREE.PerspectiveCamera;
@@ -17,14 +17,14 @@ type SceneRuntime = {
 };
 
 const palette = {
-  orbit: [0xc7ff5e, 0xf1efe9, 0x91a7ff],
-  bloom: [0xff806e, 0xc7ff5e, 0x91a7ff, 0xf1efe9],
+  particle: [0xc7ff5e, 0xf1efe9, 0x91a7ff, 0xff806e],
+  line: [0x91a7ff, 0xc7ff5e, 0xff806e, 0xf1efe9],
   signal: [0x91a7ff, 0xc7ff5e, 0xff806e],
 };
 
 const modeLabels: Record<DrawingMode, string> = {
-  orbit: "Orbit",
-  bloom: "Bloom",
+  particle: "Particle",
+  line: "Line",
   signal: "Signal",
 };
 
@@ -60,77 +60,120 @@ function addParticleHalo(group: THREE.Group, color: number, amount: number) {
   group.add(new THREE.Points(geometry, material));
 }
 
-function createOrbit(color: number, complexity: number) {
+function createParticle(color: number, complexity: number) {
   const group = new THREE.Group();
-  const ringCount = 1 + (complexity % 3);
+  const amount = 36 + complexity * 6;
+  const positions = new Float32Array(amount * 3);
+  const connectionPoints: THREE.Vector3[] = [];
 
-  for (let index = 0; index < ringCount; index += 1) {
-    const radius = randomBetween(0.38, 0.92) + index * 0.11;
-    const geometry = new THREE.TorusGeometry(
-      radius,
-      randomBetween(0.008, 0.026),
-      8,
-      80,
+  for (let index = 0; index < amount; index += 1) {
+    const radius = Math.pow(Math.random(), 0.62) * randomBetween(0.72, 1.48);
+    const theta = randomBetween(0, Math.PI * 2);
+    const phi = Math.acos(randomBetween(-1, 1));
+    const point = new THREE.Vector3(
+      Math.sin(phi) * Math.cos(theta) * radius,
+      Math.sin(phi) * Math.sin(theta) * radius * randomBetween(0.45, 0.9),
+      Math.cos(phi) * radius * randomBetween(0.5, 1),
     );
-    const material = new THREE.MeshBasicMaterial({
-      blending: THREE.AdditiveBlending,
-      color,
-      depthWrite: false,
-      opacity: randomBetween(0.38, 0.78),
-      transparent: true,
-    });
-    const ring = new THREE.Mesh(geometry, material);
-    ring.rotation.set(
-      randomBetween(-1.2, 1.2),
-      randomBetween(-1.2, 1.2),
-      randomBetween(-1.2, 1.2),
-    );
-    ring.scale.y = randomBetween(0.45, 1);
-    group.add(ring);
+    positions[index * 3] = point.x;
+    positions[index * 3 + 1] = point.y;
+    positions[index * 3 + 2] = point.z;
+    if (index < 8 + complexity) connectionPoints.push(point);
   }
 
-  const core = new THREE.Mesh(
-    new THREE.IcosahedronGeometry(randomBetween(0.06, 0.13), 1),
-    new THREE.MeshBasicMaterial({ color }),
+  const particleGeometry = new THREE.BufferGeometry();
+  particleGeometry.setAttribute(
+    "position",
+    new THREE.BufferAttribute(positions, 3),
   );
-  core.position.set(randomBetween(-0.6, 0.6), randomBetween(-0.6, 0.6), 0);
-  group.add(core);
-  addParticleHalo(group, color, 12 + complexity);
+  group.add(
+    new THREE.Points(
+      particleGeometry,
+      new THREE.PointsMaterial({
+        blending: THREE.AdditiveBlending,
+        color,
+        depthWrite: false,
+        opacity: 0.9,
+        size: randomBetween(0.045, 0.085),
+        sizeAttenuation: true,
+        transparent: true,
+      }),
+    ),
+  );
+
+  const connectionGeometry = new THREE.BufferGeometry().setFromPoints(
+    connectionPoints.flatMap((point, index) => [
+      point,
+      connectionPoints[(index * 3 + complexity) % connectionPoints.length],
+    ]),
+  );
+  group.add(
+    new THREE.LineSegments(
+      connectionGeometry,
+      new THREE.LineBasicMaterial({
+        blending: THREE.AdditiveBlending,
+        color,
+        depthWrite: false,
+        opacity: 0.24,
+        transparent: true,
+      }),
+    ),
+  );
+
+  addParticleHalo(group, color, 8 + complexity);
   return group;
 }
 
-function createBloom(color: number, complexity: number) {
+function createLine(color: number, complexity: number) {
   const group = new THREE.Group();
-  const petalCount = 4 + (complexity % 5);
+  const lineCount = 2 + (complexity % 4);
+  const baseColor = new THREE.Color(color);
+  const fadeColor = new THREE.Color(0xf1efe9);
 
-  for (let index = 0; index < petalCount; index += 1) {
-    const angle = (index / petalCount) * Math.PI * 2;
-    const geometry = new THREE.SphereGeometry(randomBetween(0.2, 0.34), 16, 10);
-    const material = new THREE.MeshPhongMaterial({
-      blending: THREE.AdditiveBlending,
-      color,
-      emissive: color,
-      emissiveIntensity: 0.34,
-      opacity: randomBetween(0.13, 0.28),
-      shininess: 90,
-      side: THREE.DoubleSide,
-      transparent: true,
+  for (let index = 0; index < lineCount; index += 1) {
+    const spread = 0.34 + index * 0.12;
+    const points = [
+      new THREE.Vector3(-1.15, randomBetween(-spread, spread), randomBetween(-0.4, 0.4)),
+      new THREE.Vector3(-0.5, randomBetween(-0.85, 0.85), randomBetween(-0.65, 0.65)),
+      new THREE.Vector3(0.15, randomBetween(-0.9, 0.9), randomBetween(-0.75, 0.75)),
+      new THREE.Vector3(0.72, randomBetween(-0.72, 0.72), randomBetween(-0.6, 0.6)),
+      new THREE.Vector3(1.25, randomBetween(-spread, spread), randomBetween(-0.4, 0.4)),
+    ];
+    const curve = new THREE.CatmullRomCurve3(points);
+    const curvePoints = curve.getPoints(36);
+    const geometry = new THREE.BufferGeometry().setFromPoints(curvePoints);
+    const colors = new Float32Array(curvePoints.length * 3);
+
+    curvePoints.forEach((_, pointIndex) => {
+      const normalized = pointIndex / Math.max(curvePoints.length - 1, 1);
+      const edgeFade = Math.sin(normalized * Math.PI);
+      const vertexColor = baseColor
+        .clone()
+        .lerp(fadeColor, (1 - edgeFade) * 0.72);
+      colors[pointIndex * 3] = vertexColor.r;
+      colors[pointIndex * 3 + 1] = vertexColor.g;
+      colors[pointIndex * 3 + 2] = vertexColor.b;
     });
-    const petal = new THREE.Mesh(geometry, material);
-    petal.scale.set(randomBetween(1.8, 2.8), randomBetween(0.28, 0.45), 0.68);
-    petal.position.set(Math.cos(angle) * 0.34, Math.sin(angle) * 0.34, 0);
-    petal.rotation.z = angle;
-    petal.rotation.x = randomBetween(-0.65, 0.65);
-    group.add(petal);
+    geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+
+    const material = new THREE.LineBasicMaterial({
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      opacity: randomBetween(0.42, 0.76),
+      transparent: true,
+      vertexColors: true,
+    });
+    const line = new THREE.Line(geometry, material);
+    line.position.y = (index - (lineCount - 1) / 2) * 0.12;
+    line.rotation.set(
+      randomBetween(-0.38, 0.38),
+      randomBetween(-0.6, 0.6),
+      randomBetween(-0.32, 0.32),
+    );
+    group.add(line);
   }
 
-  group.add(
-    new THREE.Mesh(
-      new THREE.SphereGeometry(0.1, 16, 12),
-      new THREE.MeshBasicMaterial({ color: 0xf1efe9 }),
-    ),
-  );
-  addParticleHalo(group, color, 18 + complexity * 2);
+  addParticleHalo(group, color, 5 + complexity);
   return group;
 }
 
@@ -184,10 +227,10 @@ function createSpatialMark(mode: DrawingMode, key: string, index: number) {
   const color = colors[(code + index) % colors.length];
   const complexity = 2 + ((code + index) % 7);
   const group =
-    mode === "orbit"
-      ? createOrbit(color, complexity)
-      : mode === "bloom"
-        ? createBloom(color, complexity)
+    mode === "particle"
+      ? createParticle(color, complexity)
+      : mode === "line"
+        ? createLine(color, complexity)
         : createSignal(color, complexity);
 
   group.position.set(
@@ -311,14 +354,14 @@ function MobileKeyboard({
 }
 
 export default function DrawingPage() {
-  const [mode, setMode] = useState<DrawingMode>("orbit");
+  const [mode, setMode] = useState<DrawingMode>("signal");
   const [markCount, setMarkCount] = useState(0);
   const [pulse, setPulse] = useState(false);
   const [sceneReady, setSceneReady] = useState(false);
   const [webglError, setWebglError] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const captureRef = useRef<HTMLTextAreaElement>(null);
-  const modeRef = useRef<DrawingMode>("orbit");
+  const modeRef = useRef<DrawingMode>("signal");
   const isMobileRef = useRef(false);
   const pendingKeysRef = useRef<string[]>([]);
   const pulseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
