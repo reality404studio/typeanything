@@ -247,10 +247,12 @@ function addStarField(scene: THREE.Scene) {
 }
 
 function MobileKeyboard({
+  disabled,
   onClear,
   onKey,
   onUndo,
 }: {
+  disabled: boolean;
   onClear: () => void;
   onKey: (key: string) => void;
   onUndo: () => void;
@@ -267,6 +269,7 @@ function MobileKeyboard({
             <button
               aria-label={`${key} 키로 입체 오브젝트 만들기`}
               className="mobile-key"
+              disabled={disabled}
               key={key}
               onClick={() => onKey(key)}
               type="button"
@@ -277,18 +280,29 @@ function MobileKeyboard({
         </div>
       ))}
       <div className="mobile-key-row mobile-key-actions">
-        <button className="mobile-key mobile-action-key" onClick={onUndo} type="button">
+        <button
+          className="mobile-key mobile-action-key"
+          disabled={disabled}
+          onClick={onUndo}
+          type="button"
+        >
           Undo
         </button>
         <button
           aria-label="스페이스 키로 입체 오브젝트 만들기"
           className="mobile-key mobile-space-key"
+          disabled={disabled}
           onClick={() => onKey(" ")}
           type="button"
         >
           Space
         </button>
-        <button className="mobile-key mobile-action-key" onClick={onClear} type="button">
+        <button
+          className="mobile-key mobile-action-key"
+          disabled={disabled}
+          onClick={onClear}
+          type="button"
+        >
           Clear
         </button>
       </div>
@@ -300,6 +314,7 @@ export default function DrawingPage() {
   const [mode, setMode] = useState<DrawingMode>("orbit");
   const [markCount, setMarkCount] = useState(0);
   const [pulse, setPulse] = useState(false);
+  const [sceneReady, setSceneReady] = useState(false);
   const [webglError, setWebglError] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const captureRef = useRef<HTMLTextAreaElement>(null);
@@ -451,7 +466,10 @@ export default function DrawingPage() {
       world,
     };
     runtimeRef.current = runtime;
-    pendingKeysRef.current.splice(0).forEach((key) => addMark(key));
+    const readyFrame = window.requestAnimationFrame(() => {
+      setSceneReady(true);
+      pendingKeysRef.current.splice(0).forEach((key) => addMark(key));
+    });
 
     const resizeTarget = canvas.parentElement ?? canvas;
     const resize = () => {
@@ -461,8 +479,8 @@ export default function DrawingPage() {
       camera.updateProjectionMatrix();
     };
     resize();
-    const observer = new ResizeObserver(resize);
-    observer.observe(resizeTarget);
+    window.addEventListener("resize", resize);
+    window.visualViewport?.addEventListener("resize", resize);
 
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const startedAt = performance.now();
@@ -500,7 +518,9 @@ export default function DrawingPage() {
     focusDesktopCapture();
 
     return () => {
-      observer.disconnect();
+      window.removeEventListener("resize", resize);
+      window.visualViewport?.removeEventListener("resize", resize);
+      window.cancelAnimationFrame(readyFrame);
       window.cancelAnimationFrame(runtime.frame);
       disposeObject(scene);
       renderer.dispose();
@@ -671,7 +691,12 @@ export default function DrawingPage() {
           </span>
         </footer>
       </div>
-      <MobileKeyboard onClear={clearScene} onKey={addMark} onUndo={undo} />
+      <MobileKeyboard
+        disabled={!sceneReady}
+        onClear={clearScene}
+        onKey={addMark}
+        onUndo={undo}
+      />
     </div>
   );
 }

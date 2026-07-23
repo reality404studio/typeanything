@@ -327,6 +327,11 @@
     color: var(--accent);
   }
 
+  .mobile-key:disabled {
+    opacity: 0.36;
+    cursor: wait;
+  }
+
   .mobile-action-key {
     color: #9ea3ad;
     font-size: 9px;
