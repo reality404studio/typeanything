@@ -629,7 +629,11 @@ export default function DrawingPage() {
       <div className={`draw-flash${pulse ? " on" : ""}`} />
       <div className="draw-shell">
         <header>
-          <a className="draw-brand" href="/" aria-label="문장 타이핑 페이지로 이동">
+          <a
+            className="draw-brand"
+            href={import.meta.env.BASE_URL}
+            aria-label="문장 타이핑 페이지로 이동"
+          >
             <span className="pulse" />
             Deep Work / Three.js
           </a>

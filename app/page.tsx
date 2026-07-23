@@ -294,7 +294,10 @@ export default function Home() {
 
           <div className="controls" aria-label="Display controls">
             <div className="control-group" aria-label="Experience">
-              <a className="control-btn mode-link" href="/draw">
+              <a
+                className="control-btn mode-link"
+                href={`${import.meta.env.BASE_URL}draw/`}
+              >
                 Draw
               </a>
             </div>
