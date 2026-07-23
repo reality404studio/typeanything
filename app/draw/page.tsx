@@ -305,6 +305,7 @@ export default function DrawingPage() {
   const captureRef = useRef<HTMLTextAreaElement>(null);
   const modeRef = useRef<DrawingMode>("orbit");
   const isMobileRef = useRef(false);
+  const pendingKeysRef = useRef<string[]>([]);
   const pulseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const runtimeRef = useRef<SceneRuntime | null>(null);
 
@@ -314,7 +315,10 @@ export default function DrawingPage() {
 
   const addMark = useCallback((key: string) => {
     const runtime = runtimeRef.current;
-    if (!runtime) return;
+    if (!runtime) {
+      pendingKeysRef.current.push(key);
+      return;
+    }
 
     const group = createSpatialMark(modeRef.current, key, runtime.marks.length);
     runtime.world.add(group);
@@ -337,7 +341,11 @@ export default function DrawingPage() {
 
   const undo = useCallback(() => {
     const runtime = runtimeRef.current;
-    if (!runtime?.marks.length) return;
+    if (!runtime) {
+      pendingKeysRef.current.pop();
+      return;
+    }
+    if (!runtime.marks.length) return;
     const last = runtime.marks.pop();
     if (last) {
       runtime.world.remove(last);
@@ -349,6 +357,7 @@ export default function DrawingPage() {
 
   const clearScene = useCallback(() => {
     const runtime = runtimeRef.current;
+    pendingKeysRef.current = [];
     if (!runtime) return;
     runtime.marks.forEach((mark) => {
       runtime.world.remove(mark);
@@ -442,16 +451,18 @@ export default function DrawingPage() {
       world,
     };
     runtimeRef.current = runtime;
+    pendingKeysRef.current.splice(0).forEach((key) => addMark(key));
 
+    const resizeTarget = canvas.parentElement ?? canvas;
     const resize = () => {
-      const bounds = canvas.getBoundingClientRect();
+      const bounds = resizeTarget.getBoundingClientRect();
       renderer.setSize(bounds.width, bounds.height, false);
       camera.aspect = bounds.width / Math.max(bounds.height, 1);
       camera.updateProjectionMatrix();
     };
     resize();
     const observer = new ResizeObserver(resize);
-    observer.observe(canvas);
+    observer.observe(resizeTarget);
 
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const startedAt = performance.now();
@@ -496,7 +507,7 @@ export default function DrawingPage() {
       runtimeRef.current = null;
       if (pulseTimerRef.current) clearTimeout(pulseTimerRef.current);
     };
-  }, [focusDesktopCapture]);
+  }, [addMark, focusDesktopCapture]);
 
   useEffect(() => {
     const handlePointer = (event: PointerEvent) => {
