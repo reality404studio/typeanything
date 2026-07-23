@@ -138,6 +138,12 @@ main:focus-visible {
   background: var(--accent);
 }
 
+.mode-link {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+
 main {
   min-height: 620px;
   border: 1px solid var(--line);

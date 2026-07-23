@@ -219,6 +219,11 @@ export default function Home() {
           </div>
 
           <div className="controls" aria-label="Display controls">
+            <div className="control-group" aria-label="Experience">
+              <a className="control-btn mode-link" href="/draw">
+                Draw
+              </a>
+            </div>
             <div className="control-group" aria-label="Font size">
               {(["small", "medium", "big"] as const).map((option) => (
                 <button

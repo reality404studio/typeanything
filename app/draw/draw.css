@@ -1,0 +1,232 @@
+.drawing-page {
+  min-height: 100vh;
+}
+
+.draw-shell {
+  width: min(1240px, calc(100% - 32px));
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: 22px 0 34px;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  gap: 18px;
+}
+
+.draw-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-decoration: none;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.canvas-surface {
+  min-height: 660px;
+  grid-template-columns: 64px 1fr;
+  cursor: text;
+}
+
+.canvas-stage {
+  position: relative;
+  min-width: 0;
+  min-height: 658px;
+  overflow: hidden;
+}
+
+.canvas-eyebrow {
+  position: absolute;
+  z-index: 2;
+  top: 32px;
+  left: 38px;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+
+.art-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 658px;
+}
+
+.draw-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 34px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 11px;
+  transform: translateX(-50%);
+  transition: opacity 0.5s ease, transform 0.5s ease;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.draw-hint.hidden {
+  opacity: 0;
+  transform: translate(-50%, 8px);
+}
+
+.keyboard-capture {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 2px;
+  height: 2px;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  resize: none;
+  pointer-events: none;
+}
+
+.draw-flash {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 58% 44%, rgba(199, 255, 94, 0.055), transparent 34%),
+    radial-gradient(circle at 74% 62%, rgba(145, 167, 255, 0.04), transparent 28%);
+  opacity: 0;
+  transition: opacity 0.09s ease;
+}
+
+.draw-flash.on {
+  opacity: 1;
+}
+
+.save-control {
+  color: var(--accent);
+}
+
+.save-control:disabled {
+  opacity: 0.32;
+  cursor: not-allowed;
+}
+
+.drawing-page .progress-wrap {
+  left: 64px;
+}
+
+#draw-progress {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), #91a7ff, #ff806e);
+  transition: width 0.18s ease;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (max-width: 900px) {
+  .draw-shell header {
+    align-items: flex-start;
+  }
+
+  .draw-shell .controls {
+    max-width: 520px;
+  }
+
+  .canvas-surface {
+    min-height: calc(100vh - 142px);
+  }
+
+  .canvas-stage,
+  .art-canvas {
+    min-height: calc(100vh - 144px);
+  }
+}
+
+@media (max-width: 700px) {
+  .draw-shell {
+    width: min(100% - 18px, 1240px);
+    padding-top: 10px;
+    gap: 10px;
+  }
+
+  .draw-shell header {
+    flex-direction: column;
+  }
+
+  .draw-shell .controls {
+    width: 100%;
+    max-width: none;
+    justify-content: space-between;
+  }
+
+  .draw-shell .control-group {
+    flex: 1;
+    justify-content: center;
+  }
+
+  .draw-shell .control-btn {
+    padding: 6px 7px;
+    font-size: 8px;
+  }
+
+  .canvas-surface {
+    grid-template-columns: 42px 1fr;
+    min-height: calc(100vh - 176px);
+  }
+
+  .canvas-stage,
+  .art-canvas {
+    min-height: calc(100vh - 178px);
+  }
+
+  .canvas-eyebrow {
+    top: 24px;
+    left: 24px;
+    font-size: 9px;
+  }
+
+  .draw-hint {
+    bottom: 24px;
+    width: calc(100% - 34px);
+    justify-content: center;
+    white-space: normal;
+    text-align: center;
+  }
+
+  .drawing-page .progress-wrap {
+    left: 42px;
+  }
+}
+
+@media (max-width: 430px) {
+  .draw-shell .controls {
+    gap: 5px;
+  }
+
+  .draw-shell .control-group {
+    padding: 2px;
+  }
+
+  .draw-shell .control-btn {
+    padding: 6px 5px;
+    letter-spacing: 0.02em;
+  }
+
+  .save-control {
+    display: none;
+  }
+}
