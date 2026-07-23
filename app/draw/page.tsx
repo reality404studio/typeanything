@@ -1,30 +1,25 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import * as THREE from "three";
 import "./draw.css";
 
 type DrawingMode = "orbit" | "bloom" | "signal";
 
-type Mark = {
-  mode: DrawingMode;
-  color: string;
-  x: number;
-  y: number;
-  x2: number;
-  y2: number;
-  controlX: number;
-  controlY: number;
-  radius: number;
-  width: number;
-  rotation: number;
-  alpha: number;
-  satellites: number;
+type SceneRuntime = {
+  camera: THREE.PerspectiveCamera;
+  frame: number;
+  marks: THREE.Group[];
+  pointer: THREE.Vector2;
+  renderer: THREE.WebGLRenderer;
+  scene: THREE.Scene;
+  world: THREE.Group;
 };
 
 const palette = {
-  orbit: ["#c7ff5e", "#f1efe9", "#91a7ff"],
-  bloom: ["#ff806e", "#c7ff5e", "#91a7ff", "#f1efe9"],
-  signal: ["#91a7ff", "#c7ff5e", "#ff806e"],
+  orbit: [0xc7ff5e, 0xf1efe9, 0x91a7ff],
+  bloom: [0xff806e, 0xc7ff5e, 0x91a7ff, 0xf1efe9],
+  signal: [0x91a7ff, 0xc7ff5e, 0xff806e],
 };
 
 const modeLabels: Record<DrawingMode, string> = {
@@ -36,217 +31,271 @@ const modeLabels: Record<DrawingMode, string> = {
 const randomBetween = (min: number, max: number) =>
   min + Math.random() * (max - min);
 
-function createMark(mode: DrawingMode, key: string, index: number): Mark {
-  const charCode = key.length ? key.codePointAt(0) ?? 0 : 0;
-  const colors = palette[mode];
-  const bias = ((charCode * 17 + index * 29) % 100) / 100;
+function addParticleHalo(group: THREE.Group, color: number, amount: number) {
+  const positions = new Float32Array(amount * 3);
+  for (let index = 0; index < amount; index += 1) {
+    const radius = randomBetween(0.25, 1.15);
+    const angle = randomBetween(0, Math.PI * 2);
+    positions[index * 3] = Math.cos(angle) * radius;
+    positions[index * 3 + 1] = Math.sin(angle) * radius;
+    positions[index * 3 + 2] = randomBetween(-0.5, 0.5);
+  }
 
-  return {
-    mode,
-    color: colors[(charCode + index) % colors.length],
-    x: randomBetween(0.12, 0.88),
-    y: randomBetween(0.13, 0.87),
-    x2: randomBetween(0.12, 0.88),
-    y2: randomBetween(0.13, 0.87),
-    controlX: randomBetween(0.08, 0.92),
-    controlY: randomBetween(0.08, 0.92),
-    radius: randomBetween(0.025, 0.13) * (0.7 + bias * 0.65),
-    width: randomBetween(0.7, 2.7),
-    rotation: randomBetween(0, Math.PI * 2),
-    alpha: randomBetween(0.42, 0.86),
-    satellites: 2 + ((charCode + index) % 6),
-  };
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+  const material = new THREE.PointsMaterial({
+    blending: THREE.AdditiveBlending,
+    color,
+    depthWrite: false,
+    opacity: 0.72,
+    size: randomBetween(0.025, 0.055),
+    transparent: true,
+  });
+  group.add(new THREE.Points(geometry, material));
 }
 
-function paintMark(
-  context: CanvasRenderingContext2D,
-  mark: Mark,
-  width: number,
-  height: number,
-) {
-  const x = mark.x * width;
-  const y = mark.y * height;
-  const x2 = mark.x2 * width;
-  const y2 = mark.y2 * height;
-  const controlX = mark.controlX * width;
-  const controlY = mark.controlY * height;
-  const radius = mark.radius * Math.min(width, height);
+function createOrbit(color: number, complexity: number) {
+  const group = new THREE.Group();
+  const ringCount = 1 + (complexity % 3);
 
-  context.save();
-  context.globalCompositeOperation = "screen";
-  context.lineCap = "round";
-  context.lineJoin = "round";
-  context.strokeStyle = mark.color;
-  context.fillStyle = mark.color;
-  context.lineWidth = mark.width;
-  context.globalAlpha = mark.alpha;
-
-  if (mark.mode === "orbit") {
-    context.beginPath();
-    context.moveTo(x, y);
-    context.bezierCurveTo(controlX, controlY, x2, y, x2, y2);
-    context.stroke();
-
-    context.globalAlpha = mark.alpha * 0.5;
-    context.beginPath();
-    context.ellipse(
-      x,
-      y,
-      radius * 1.65,
-      radius * 0.72,
-      mark.rotation,
-      0,
-      Math.PI * 1.72,
+  for (let index = 0; index < ringCount; index += 1) {
+    const radius = randomBetween(0.38, 0.92) + index * 0.11;
+    const geometry = new THREE.TorusGeometry(
+      radius,
+      randomBetween(0.008, 0.026),
+      8,
+      80,
     );
-    context.stroke();
-
-    for (let index = 0; index < mark.satellites; index += 1) {
-      const angle = mark.rotation + (index / mark.satellites) * Math.PI * 2;
-      context.globalAlpha = mark.alpha * (0.45 + index / mark.satellites / 2);
-      context.beginPath();
-      context.arc(
-        x + Math.cos(angle) * radius * 1.7,
-        y + Math.sin(angle) * radius * 0.78,
-        Math.max(1.3, mark.width * 1.15),
-        0,
-        Math.PI * 2,
-      );
-      context.fill();
-    }
+    const material = new THREE.MeshBasicMaterial({
+      blending: THREE.AdditiveBlending,
+      color,
+      depthWrite: false,
+      opacity: randomBetween(0.38, 0.78),
+      transparent: true,
+    });
+    const ring = new THREE.Mesh(geometry, material);
+    ring.rotation.set(
+      randomBetween(-1.2, 1.2),
+      randomBetween(-1.2, 1.2),
+      randomBetween(-1.2, 1.2),
+    );
+    ring.scale.y = randomBetween(0.45, 1);
+    group.add(ring);
   }
 
-  if (mark.mode === "bloom") {
-    context.translate(x, y);
-    context.rotate(mark.rotation);
-    for (let index = 0; index < mark.satellites; index += 1) {
-      const angle = (index / mark.satellites) * Math.PI * 2;
-      context.save();
-      context.rotate(angle);
-      context.globalAlpha = mark.alpha * 0.16;
-      context.beginPath();
-      context.ellipse(
-        radius * 0.72,
-        0,
-        radius,
-        radius * 0.34,
-        0,
-        0,
-        Math.PI * 2,
-      );
-      context.fill();
-      context.globalAlpha = mark.alpha * 0.54;
-      context.stroke();
-      context.restore();
-    }
-    context.globalAlpha = mark.alpha;
-    context.beginPath();
-    context.arc(0, 0, Math.max(1.8, mark.width * 1.4), 0, Math.PI * 2);
-    context.fill();
+  const core = new THREE.Mesh(
+    new THREE.IcosahedronGeometry(randomBetween(0.06, 0.13), 1),
+    new THREE.MeshBasicMaterial({ color }),
+  );
+  core.position.set(randomBetween(-0.6, 0.6), randomBetween(-0.6, 0.6), 0);
+  group.add(core);
+  addParticleHalo(group, color, 12 + complexity);
+  return group;
+}
+
+function createBloom(color: number, complexity: number) {
+  const group = new THREE.Group();
+  const petalCount = 4 + (complexity % 5);
+
+  for (let index = 0; index < petalCount; index += 1) {
+    const angle = (index / petalCount) * Math.PI * 2;
+    const geometry = new THREE.SphereGeometry(randomBetween(0.2, 0.34), 16, 10);
+    const material = new THREE.MeshPhongMaterial({
+      blending: THREE.AdditiveBlending,
+      color,
+      emissive: color,
+      emissiveIntensity: 0.34,
+      opacity: randomBetween(0.13, 0.28),
+      shininess: 90,
+      side: THREE.DoubleSide,
+      transparent: true,
+    });
+    const petal = new THREE.Mesh(geometry, material);
+    petal.scale.set(randomBetween(1.8, 2.8), randomBetween(0.28, 0.45), 0.68);
+    petal.position.set(Math.cos(angle) * 0.34, Math.sin(angle) * 0.34, 0);
+    petal.rotation.z = angle;
+    petal.rotation.x = randomBetween(-0.65, 0.65);
+    group.add(petal);
   }
 
-  if (mark.mode === "signal") {
-    context.beginPath();
-    context.moveTo(x, y);
-    context.lineTo(controlX, y);
-    context.lineTo(controlX, controlY);
-    context.lineTo(x2, controlY);
-    context.lineTo(x2, y2);
-    context.stroke();
+  group.add(
+    new THREE.Mesh(
+      new THREE.SphereGeometry(0.1, 16, 12),
+      new THREE.MeshBasicMaterial({ color: 0xf1efe9 }),
+    ),
+  );
+  addParticleHalo(group, color, 18 + complexity * 2);
+  return group;
+}
 
-    context.globalAlpha = mark.alpha * 0.32;
-    for (let index = 1; index <= mark.satellites; index += 1) {
-      const offset = index * 4.5;
-      context.beginPath();
-      context.moveTo(x + offset, y + offset);
-      context.lineTo(controlX + offset, y + offset);
-      context.lineTo(controlX + offset, controlY + offset);
-      context.stroke();
-    }
+function createSignal(color: number, complexity: number) {
+  const group = new THREE.Group();
+  const frameCount = 2 + (complexity % 4);
 
-    context.globalAlpha = mark.alpha;
-    context.beginPath();
-    context.arc(x2, y2, Math.max(2, mark.width * 1.45), 0, Math.PI * 2);
-    context.fill();
+  for (let index = 0; index < frameCount; index += 1) {
+    const size = randomBetween(0.38, 0.9) + index * 0.08;
+    const geometry = new THREE.EdgesGeometry(
+      new THREE.BoxGeometry(size, size * randomBetween(0.45, 1.15), size),
+    );
+    const material = new THREE.LineBasicMaterial({
+      blending: THREE.AdditiveBlending,
+      color,
+      opacity: randomBetween(0.32, 0.68),
+      transparent: true,
+    });
+    const frame = new THREE.LineSegments(geometry, material);
+    frame.position.set(index * 0.1, index * -0.07, index * 0.1);
+    frame.rotation.set(
+      randomBetween(-0.8, 0.8),
+      randomBetween(-0.8, 0.8),
+      randomBetween(-0.8, 0.8),
+    );
+    group.add(frame);
   }
 
-  context.restore();
+  const path = [
+    new THREE.Vector3(-0.8, randomBetween(-0.4, 0.4), randomBetween(-0.4, 0.4)),
+    new THREE.Vector3(-0.2, randomBetween(-0.7, 0.7), randomBetween(-0.6, 0.6)),
+    new THREE.Vector3(0.3, randomBetween(-0.7, 0.7), randomBetween(-0.6, 0.6)),
+    new THREE.Vector3(0.9, randomBetween(-0.4, 0.4), randomBetween(-0.4, 0.4)),
+  ];
+  const curve = new THREE.CatmullRomCurve3(path);
+  const lineGeometry = new THREE.BufferGeometry().setFromPoints(curve.getPoints(44));
+  const lineMaterial = new THREE.LineBasicMaterial({
+    blending: THREE.AdditiveBlending,
+    color,
+    opacity: 0.78,
+    transparent: true,
+  });
+  group.add(new THREE.Line(lineGeometry, lineMaterial));
+  addParticleHalo(group, color, 10 + complexity);
+  return group;
+}
+
+function createSpatialMark(mode: DrawingMode, key: string, index: number) {
+  const code = key.codePointAt(0) ?? index;
+  const colors = palette[mode];
+  const color = colors[(code + index) % colors.length];
+  const complexity = 2 + ((code + index) % 7);
+  const group =
+    mode === "orbit"
+      ? createOrbit(color, complexity)
+      : mode === "bloom"
+        ? createBloom(color, complexity)
+        : createSignal(color, complexity);
+
+  group.position.set(
+    randomBetween(-2.8, 2.8),
+    randomBetween(-1.75, 1.75),
+    randomBetween(-2.2, 1.35),
+  );
+  group.rotation.set(
+    randomBetween(-Math.PI, Math.PI),
+    randomBetween(-Math.PI, Math.PI),
+    randomBetween(-Math.PI, Math.PI),
+  );
+  const scale = randomBetween(0.55, 1.22);
+  group.scale.setScalar(scale);
+  group.userData.baseScale = scale;
+  group.userData.spin = new THREE.Vector3(
+    randomBetween(-0.0045, 0.0045),
+    randomBetween(-0.006, 0.006),
+    randomBetween(-0.0035, 0.0035),
+  );
+  group.userData.phase = randomBetween(0, Math.PI * 2);
+  group.userData.baseY = group.position.y;
+  return group;
+}
+
+function disposeObject(object: THREE.Object3D) {
+  object.traverse((child) => {
+    const renderable = child as THREE.Mesh | THREE.Line | THREE.Points;
+    if (renderable.geometry) renderable.geometry.dispose();
+    const materials = Array.isArray(renderable.material)
+      ? renderable.material
+      : renderable.material
+        ? [renderable.material]
+        : [];
+    materials.forEach((material) => material.dispose());
+  });
+}
+
+function addStarField(scene: THREE.Scene) {
+  const positions = new Float32Array(360 * 3);
+  for (let index = 0; index < 360; index += 1) {
+    positions[index * 3] = randomBetween(-9, 9);
+    positions[index * 3 + 1] = randomBetween(-5.5, 5.5);
+    positions[index * 3 + 2] = randomBetween(-8, 1);
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+  const material = new THREE.PointsMaterial({
+    color: 0x91a7ff,
+    depthWrite: false,
+    opacity: 0.24,
+    size: 0.018,
+    transparent: true,
+  });
+  scene.add(new THREE.Points(geometry, material));
 }
 
 export default function DrawingPage() {
   const [mode, setMode] = useState<DrawingMode>("orbit");
   const [markCount, setMarkCount] = useState(0);
   const [pulse, setPulse] = useState(false);
+  const [webglError, setWebglError] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const surfaceRef = useRef<HTMLElement>(null);
   const captureRef = useRef<HTMLTextAreaElement>(null);
-  const marksRef = useRef<Mark[]>([]);
   const modeRef = useRef<DrawingMode>("orbit");
   const pulseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const runtimeRef = useRef<SceneRuntime | null>(null);
 
-  const renderCanvas = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const context = canvas.getContext("2d");
-    if (!context) return;
-    const bounds = canvas.getBoundingClientRect();
-    const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+  const addMark = useCallback((key: string) => {
+    const runtime = runtimeRef.current;
+    if (!runtime) return;
 
-    if (
-      canvas.width !== Math.round(bounds.width * pixelRatio) ||
-      canvas.height !== Math.round(bounds.height * pixelRatio)
-    ) {
-      canvas.width = Math.round(bounds.width * pixelRatio);
-      canvas.height = Math.round(bounds.height * pixelRatio);
+    const group = createSpatialMark(modeRef.current, key, runtime.marks.length);
+    runtime.world.add(group);
+    runtime.marks.push(group);
+
+    if (runtime.marks.length > 84) {
+      const oldest = runtime.marks.shift();
+      if (oldest) {
+        runtime.world.remove(oldest);
+        disposeObject(oldest);
+      }
     }
 
-    context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
-    context.clearRect(0, 0, bounds.width, bounds.height);
-
-    const gradient = context.createRadialGradient(
-      bounds.width * 0.55,
-      bounds.height * 0.48,
-      0,
-      bounds.width * 0.55,
-      bounds.height * 0.48,
-      Math.max(bounds.width, bounds.height) * 0.7,
-    );
-    gradient.addColorStop(0, "rgba(145, 167, 255, 0.035)");
-    gradient.addColorStop(1, "rgba(11, 12, 15, 0)");
-    context.fillStyle = gradient;
-    context.fillRect(0, 0, bounds.width, bounds.height);
-
-    marksRef.current.forEach((mark) =>
-      paintMark(context, mark, bounds.width, bounds.height),
-    );
+    setMarkCount(runtime.marks.length);
+    setPulse(true);
+    if (pulseTimerRef.current) clearTimeout(pulseTimerRef.current);
+    pulseTimerRef.current = setTimeout(() => setPulse(false), 90);
   }, []);
 
-  const addMark = useCallback(
-    (key: string) => {
-      const mark = createMark(modeRef.current, key, marksRef.current.length);
-      marksRef.current.push(mark);
-      setMarkCount(marksRef.current.length);
-      setPulse(true);
-      renderCanvas();
-
-      if (pulseTimerRef.current) clearTimeout(pulseTimerRef.current);
-      pulseTimerRef.current = setTimeout(() => setPulse(false), 90);
-    },
-    [renderCanvas],
-  );
-
   const undo = useCallback(() => {
-    if (!marksRef.current.length) return;
-    marksRef.current.pop();
-    setMarkCount(marksRef.current.length);
-    renderCanvas();
-  }, [renderCanvas]);
-
-  const clearCanvas = useCallback(() => {
-    marksRef.current = [];
-    setMarkCount(0);
-    renderCanvas();
+    const runtime = runtimeRef.current;
+    if (!runtime?.marks.length) return;
+    const last = runtime.marks.pop();
+    if (last) {
+      runtime.world.remove(last);
+      disposeObject(last);
+    }
+    setMarkCount(runtime.marks.length);
     captureRef.current?.focus();
-  }, [renderCanvas]);
+  }, []);
+
+  const clearScene = useCallback(() => {
+    const runtime = runtimeRef.current;
+    if (!runtime) return;
+    runtime.marks.forEach((mark) => {
+      runtime.world.remove(mark);
+      disposeObject(mark);
+    });
+    runtime.marks = [];
+    setMarkCount(0);
+    captureRef.current?.focus();
+  }, []);
 
   const changeMode = (nextMode: DrawingMode) => {
     modeRef.current = nextMode;
@@ -255,38 +304,145 @@ export default function DrawingPage() {
   };
 
   const downloadArtwork = () => {
+    const runtime = runtimeRef.current;
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!runtime || !canvas) return;
+    runtime.renderer.render(runtime.scene, runtime.camera);
+
     const exportCanvas = document.createElement("canvas");
     exportCanvas.width = canvas.width;
     exportCanvas.height = canvas.height;
     const context = exportCanvas.getContext("2d");
     if (!context) return;
-
     context.fillStyle = "#0b0c0f";
     context.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
     context.drawImage(canvas, 0, 0);
 
     const anchor = document.createElement("a");
     anchor.href = exportCanvas.toDataURL("image/png");
-    anchor.download = `deep-work-drawing-${Date.now()}.png`;
+    anchor.download = `deep-work-three-${Date.now()}.png`;
     anchor.click();
     captureRef.current?.focus();
   };
 
   useEffect(() => {
-    renderCanvas();
-    const observer = new ResizeObserver(renderCanvas);
-    if (canvasRef.current) observer.observe(canvasRef.current);
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    let renderer: THREE.WebGLRenderer;
+    try {
+      renderer = new THREE.WebGLRenderer({
+        alpha: true,
+        antialias: true,
+        canvas,
+        powerPreference: "high-performance",
+        preserveDrawingBuffer: true,
+      });
+    } catch {
+      setWebglError(true);
+      return;
+    }
+
+    renderer.setClearColor(0x0b0c0f, 0);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.1;
+
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(0x0b0c0f, 0.055);
+    const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 100);
+    camera.position.set(0, 0, 9);
+    const world = new THREE.Group();
+    scene.add(world);
+    scene.add(new THREE.AmbientLight(0x91a7ff, 0.46));
+
+    const limeLight = new THREE.PointLight(0xc7ff5e, 14, 18);
+    limeLight.position.set(4, 3, 5);
+    scene.add(limeLight);
+    const coralLight = new THREE.PointLight(0xff806e, 11, 16);
+    coralLight.position.set(-4, -2, 4);
+    scene.add(coralLight);
+    addStarField(scene);
+
+    const runtime: SceneRuntime = {
+      camera,
+      frame: 0,
+      marks: [],
+      pointer: new THREE.Vector2(),
+      renderer,
+      scene,
+      world,
+    };
+    runtimeRef.current = runtime;
+
+    const resize = () => {
+      const bounds = canvas.getBoundingClientRect();
+      renderer.setSize(bounds.width, bounds.height, false);
+      camera.aspect = bounds.width / Math.max(bounds.height, 1);
+      camera.updateProjectionMatrix();
+    };
+    resize();
+    const observer = new ResizeObserver(resize);
+    observer.observe(canvas);
+
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const clock = new THREE.Clock();
+    const animate = () => {
+      const elapsed = clock.getElapsedTime();
+      const motion = reducedMotion ? 0 : 1;
+      runtime.frame = window.requestAnimationFrame(animate);
+      world.rotation.y +=
+        (runtime.pointer.x * 0.16 - world.rotation.y) * 0.018 * motion;
+      world.rotation.x +=
+        (-runtime.pointer.y * 0.1 - world.rotation.x) * 0.018 * motion;
+
+      runtime.marks.forEach((mark, index) => {
+        const spin = mark.userData.spin as THREE.Vector3;
+        mark.rotation.x += spin.x * motion;
+        mark.rotation.y += spin.y * motion;
+        mark.rotation.z += spin.z * motion;
+        mark.position.y =
+          (mark.userData.baseY as number) +
+          Math.sin(elapsed * 0.42 + (mark.userData.phase as number)) *
+            0.055 *
+            motion;
+        const baseScale = mark.userData.baseScale as number;
+        mark.scale.setScalar(
+          baseScale * (1 + Math.sin(elapsed * 0.7 + index) * 0.012 * motion),
+        );
+      });
+
+      camera.position.x += (runtime.pointer.x * 0.28 - camera.position.x) * 0.01 * motion;
+      camera.position.y += (-runtime.pointer.y * 0.18 - camera.position.y) * 0.01 * motion;
+      camera.lookAt(0, 0, 0);
+      renderer.render(scene, camera);
+    };
+    animate();
     captureRef.current?.focus();
 
     return () => {
       observer.disconnect();
+      window.cancelAnimationFrame(runtime.frame);
+      disposeObject(scene);
+      renderer.dispose();
+      runtimeRef.current = null;
       if (pulseTimerRef.current) clearTimeout(pulseTimerRef.current);
     };
-  }, [renderCanvas]);
+  }, []);
 
   useEffect(() => {
+    const handlePointer = (event: PointerEvent) => {
+      const canvas = canvasRef.current;
+      const runtime = runtimeRef.current;
+      if (!canvas || !runtime) return;
+      const bounds = canvas.getBoundingClientRect();
+      runtime.pointer.set(
+        ((event.clientX - bounds.left) / bounds.width) * 2 - 1,
+        ((event.clientY - bounds.top) / bounds.height) * 2 - 1,
+      );
+    };
+
     const handleKeyDown = (event: KeyboardEvent) => {
       const target = event.target;
       if (
@@ -301,14 +457,18 @@ export default function DrawingPage() {
       }
 
       event.preventDefault();
-      if (event.key === "Escape") clearCanvas();
+      if (event.key === "Escape") clearScene();
       else if (event.key === "Backspace" || event.key === "Delete") undo();
       else addMark(event.key);
     };
 
+    window.addEventListener("pointermove", handlePointer, { passive: true });
     window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [addMark, clearCanvas, undo]);
+    return () => {
+      window.removeEventListener("pointermove", handlePointer);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [addMark, clearScene, undo]);
 
   const handleCaptureKey = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (["Meta", "Control", "Alt", "Shift", "CapsLock", "Tab"].includes(event.key)) {
@@ -316,25 +476,25 @@ export default function DrawingPage() {
     }
 
     event.preventDefault();
-    if (event.key === "Escape") clearCanvas();
+    if (event.key === "Escape") clearScene();
     else if (event.key === "Backspace" || event.key === "Delete") undo();
     else addMark(event.key);
   };
 
-  const completion = Math.min(100, (markCount / 72) * 100);
+  const completion = Math.min(100, (markCount / 54) * 100);
 
   return (
-    <div className="drawing-page">
+    <div className="drawing-page three-drawing-page">
       <div className={`draw-flash${pulse ? " on" : ""}`} />
       <div className="draw-shell">
         <header>
           <a className="draw-brand" href="/" aria-label="문장 타이핑 페이지로 이동">
             <span className="pulse" />
-            Deep Work / Draw
+            Deep Work / Three.js
           </a>
 
-          <div className="controls" aria-label="그림 제어">
-            <div className="control-group" aria-label="그림 스타일">
+          <div className="controls" aria-label="입체 그림 제어">
+            <div className="control-group" aria-label="입체 조형 스타일">
               {(Object.keys(modeLabels) as DrawingMode[]).map((option) => (
                 <button
                   className={`control-btn${mode === option ? " active" : ""}`}
@@ -347,11 +507,11 @@ export default function DrawingPage() {
               ))}
             </div>
 
-            <div className="control-group" aria-label="캔버스 작업">
+            <div className="control-group" aria-label="장면 작업">
               <button className="control-btn" onClick={undo} type="button">
                 Undo
               </button>
-              <button className="control-btn" onClick={clearCanvas} type="button">
+              <button className="control-btn" onClick={clearScene} type="button">
                 Clear
               </button>
               <button
@@ -370,33 +530,38 @@ export default function DrawingPage() {
           className="canvas-surface"
           onClick={() => {
             captureRef.current?.focus();
-            if (!marksRef.current.length) addMark("start");
+            if (!runtimeRef.current?.marks.length) addMark("start");
           }}
-          ref={surfaceRef}
           tabIndex={-1}
         >
           <aside className="rail draw-rail">
-            <span>CANVAS / 001</span>
+            <span>SPACE / 001</span>
           </aside>
 
           <section className="canvas-stage">
             <div className="canvas-eyebrow">
-              Generative study · {modeLabels[mode].toLowerCase()}
+              Three.js spatial study · {modeLabels[mode].toLowerCase()}
             </div>
             <canvas
-              aria-label={`키 입력으로 그린 추상화. 현재 ${markCount}개의 획이 있습니다.`}
-              className="art-canvas"
+              aria-label={`키 입력으로 만든 입체 조형물. 현재 ${markCount}개의 오브젝트가 있습니다.`}
+              className="art-canvas webgl-canvas"
               ref={canvasRef}
               role="img"
             />
 
-            <div className={`draw-hint${markCount ? " hidden" : ""}`}>
-              <span className="key">ANY KEY</span>
-              <span>아무렇게나 타이핑하면 그림이 시작됩니다</span>
-            </div>
+            {webglError ? (
+              <div className="webgl-error">
+                이 브라우저에서는 3D 그래픽을 시작할 수 없습니다.
+              </div>
+            ) : (
+              <div className={`draw-hint${markCount ? " hidden" : ""}`}>
+                <span className="key">ANY KEY</span>
+                <span>타이핑할수록 공간에 조형물이 쌓입니다</span>
+              </div>
+            )}
 
             <textarea
-              aria-label="그림을 그리기 위한 키보드 입력"
+              aria-label="입체 그림을 만들기 위한 키보드 입력"
               autoComplete="off"
               className="keyboard-capture"
               onChange={(event) => {
@@ -410,7 +575,7 @@ export default function DrawingPage() {
             />
 
             <div aria-live="polite" className="sr-only">
-              현재 {markCount}개의 획이 그려졌습니다.
+              현재 {markCount}개의 입체 오브젝트가 만들어졌습니다.
             </div>
           </section>
 
@@ -421,10 +586,10 @@ export default function DrawingPage() {
 
         <footer>
           <span>
-            Visual density: <span className="count">{Math.round(completion)}</span>%
+            Spatial density: <span className="count">{Math.round(completion)}</span>%
           </span>
           <span>
-            <span className="count">{markCount.toLocaleString()}</span> strokes
+            <span className="count">{markCount.toLocaleString()}</span> objects
           </span>
         </footer>
       </div>
